@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { open } from "@tauri-apps/plugin-shell";
 
 export interface GatewayStatus {
   running: boolean;
@@ -63,3 +64,6 @@ export const readConfig = () => invoke<ConfigData>("read_config");
 
 export const writeConfig = (json: string) =>
   invoke<string>("write_config", { json });
+
+// Shell
+export const openUrl = (url: string) => open(url);

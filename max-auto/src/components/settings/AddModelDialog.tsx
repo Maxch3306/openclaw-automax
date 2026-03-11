@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useSettingsStore } from "../../stores/settings-store";
+import { openUrl } from "../../api/tauri-commands";
 
 const PROVIDERS = [
   { id: "bailian", label: "Qwen Coding (Bailian)", defaultUrl: "https://coding.dashscope.aliyuncs.com/v1" },
@@ -12,6 +13,23 @@ const PROVIDERS = [
   { id: "custom", label: "Custom", defaultUrl: "" },
 ];
 
+type AuthMethod = "api_key" | "oauth" | "setup_token";
+
+const PROVIDER_AUTH_METHODS: Record<string, { methods: { id: AuthMethod; label: string }[] }> = {
+  openai: {
+    methods: [
+      { id: "api_key", label: "API Key" },
+      { id: "oauth", label: "OAuth Login" },
+    ],
+  },
+  anthropic: {
+    methods: [
+      { id: "api_key", label: "API Key" },
+      { id: "setup_token", label: "Setup Token" },
+    ],
+  },
+};
+
 const API_PROTOCOLS = ["OpenAI", "Anthropic"];
 
 export function AddModelDialog() {
@@ -19,19 +37,58 @@ export function AddModelDialog() {
   const addCustomModel = useSettingsStore((s) => s.addCustomModel);
 
   const [provider, setProvider] = useState("zhipu");
+  const [authMethod, setAuthMethod] = useState<AuthMethod>("api_key");
   const [modelId, setModelId] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [apiKey, setApiKey] = useState("");
+  const [setupToken, setSetupToken] = useState("");
   const [apiProtocol, setApiProtocol] = useState("OpenAI");
   const [baseUrl, setBaseUrl] = useState(PROVIDERS[0].defaultUrl);
   const [showKey, setShowKey] = useState(false);
+  const [showToken, setShowToken] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [oauthStatus, setOauthStatus] = useState<"idle" | "pending" | "success" | "error">("idle");
+
+  const providerAuth = PROVIDER_AUTH_METHODS[provider];
+  const hasAuthMethods = !!providerAuth;
 
   const handleProviderChange = (newProvider: string) => {
     setProvider(newProvider);
+    setAuthMethod("api_key");
+    setOauthStatus("idle");
+    setError("");
     const p = PROVIDERS.find((p) => p.id === newProvider);
     if (p) setBaseUrl(p.defaultUrl);
+    // Auto-set protocol based on provider
+    if (newProvider === "anthropic") {
+      setApiProtocol("Anthropic");
+    } else {
+      setApiProtocol("OpenAI");
+    }
+  };
+
+  const handleOAuthLogin = async () => {
+    if (provider === "openai") {
+      setOauthStatus("pending");
+      setError("");
+      try {
+        // Open OpenAI platform login page — user creates API key there
+        await openUrl("https://platform.openai.com/api-keys");
+        setOauthStatus("success");
+      } catch (err) {
+        setOauthStatus("error");
+        setError(`Failed to open browser: ${err}`);
+      }
+    }
+  };
+
+  const handleOpenAnthropicConsole = async () => {
+    try {
+      await openUrl("https://console.anthropic.com/settings/keys");
+    } catch (err) {
+      setError(`Failed to open browser: ${err}`);
+    }
   };
 
   const handleSubmit = async () => {
@@ -39,6 +96,15 @@ export function AddModelDialog() {
       setError("Model ID is required");
       return;
     }
+
+    // Determine the credential to use
+    let credential = "";
+    if (authMethod === "api_key") {
+      credential = apiKey.trim();
+    } else if (authMethod === "setup_token") {
+      credential = setupToken.trim();
+    }
+
     setSaving(true);
     setError("");
     try {
@@ -46,7 +112,7 @@ export function AddModelDialog() {
         id: modelId.trim(),
         displayName: displayName.trim() || modelId.trim(),
         provider: PROVIDERS.find((p) => p.id === provider)?.label ?? provider,
-        apiKey: apiKey.trim() || undefined,
+        apiKey: credential || undefined,
         apiProtocol,
         baseUrl: baseUrl.trim(),
       });
@@ -57,6 +123,9 @@ export function AddModelDialog() {
       setSaving(false);
     }
   };
+
+  const inputClass =
+    "w-full bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm text-[var(--color-text)] placeholder:text-[var(--color-text-muted)]/50 focus:outline-none focus:border-[var(--color-accent)]";
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
@@ -87,7 +156,7 @@ export function AddModelDialog() {
             <select
               value={provider}
               onChange={(e) => handleProviderChange(e.target.value)}
-              className="w-full bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm text-[var(--color-text)] focus:outline-none focus:border-[var(--color-accent)]"
+              className={inputClass}
             >
               {PROVIDERS.map((p) => (
                 <option key={p.id} value={p.id}>
@@ -97,6 +166,33 @@ export function AddModelDialog() {
             </select>
           </div>
 
+          {/* Auth Method (only for providers that support multiple methods) */}
+          {hasAuthMethods && (
+            <div>
+              <label className="block text-sm text-[var(--color-text-muted)] mb-1">Auth Method</label>
+              <div className="flex gap-2">
+                {providerAuth.methods.map((m) => (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => {
+                      setAuthMethod(m.id);
+                      setError("");
+                      setOauthStatus("idle");
+                    }}
+                    className={`flex-1 px-3 py-2 text-sm rounded-lg border transition-colors ${
+                      authMethod === m.id
+                        ? "border-[var(--color-accent)] bg-[var(--color-accent)]/10 text-[var(--color-accent)]"
+                        : "border-[var(--color-border)] text-[var(--color-text-muted)] hover:border-[var(--color-text-muted)]"
+                    }`}
+                  >
+                    {m.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Model ID */}
           <div>
             <label className="block text-sm text-[var(--color-text-muted)] mb-1">* Model ID</label>
@@ -105,7 +201,7 @@ export function AddModelDialog() {
               value={modelId}
               onChange={(e) => setModelId(e.target.value)}
               placeholder="Enter model ID"
-              className="w-full bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm text-[var(--color-text)] placeholder:text-[var(--color-text-muted)]/50 focus:outline-none focus:border-[var(--color-accent)]"
+              className={inputClass}
             />
           </div>
 
@@ -117,30 +213,117 @@ export function AddModelDialog() {
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
               placeholder="Enter display name"
-              className="w-full bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm text-[var(--color-text)] placeholder:text-[var(--color-text-muted)]/50 focus:outline-none focus:border-[var(--color-accent)]"
+              className={inputClass}
             />
           </div>
 
-          {/* API Key */}
-          <div>
-            <label className="block text-sm text-[var(--color-text-muted)] mb-1">API Key</label>
-            <div className="relative">
-              <input
-                type={showKey ? "text" : "password"}
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                placeholder="Enter API Key (optional)"
-                className="w-full bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg px-3 py-2 pr-10 text-sm text-[var(--color-text)] placeholder:text-[var(--color-text-muted)]/50 focus:outline-none focus:border-[var(--color-accent)]"
-              />
-              <button
-                type="button"
-                onClick={() => setShowKey(!showKey)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)] hover:text-[var(--color-text)] text-xs"
-              >
-                {showKey ? "🙈" : "👁"}
-              </button>
+          {/* Auth Credential Section — varies by method */}
+          {authMethod === "api_key" && (
+            <div>
+              <label className="block text-sm text-[var(--color-text-muted)] mb-1">API Key</label>
+              <div className="relative">
+                <input
+                  type={showKey ? "text" : "password"}
+                  value={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)}
+                  placeholder="Enter API Key (optional)"
+                  className={`${inputClass} pr-10`}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowKey(!showKey)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)] hover:text-[var(--color-text)] text-xs"
+                >
+                  {showKey ? "Hide" : "Show"}
+                </button>
+              </div>
             </div>
-          </div>
+          )}
+
+          {authMethod === "oauth" && provider === "openai" && (
+            <div className="space-y-3">
+              <div className="px-3 py-3 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)]">
+                <p className="text-xs text-[var(--color-text-muted)] mb-3">
+                  Click the button below to open OpenAI's API key page in your browser.
+                  Create or copy your API key, then paste it here.
+                </p>
+                <button
+                  type="button"
+                  onClick={handleOAuthLogin}
+                  disabled={oauthStatus === "pending"}
+                  className="w-full px-3 py-2 text-sm rounded-lg bg-[#10a37f] text-white hover:opacity-90 transition-opacity disabled:opacity-50"
+                >
+                  {oauthStatus === "pending"
+                    ? "Opening browser..."
+                    : oauthStatus === "success"
+                      ? "Browser opened — paste your key below"
+                      : "Open OpenAI Platform"}
+                </button>
+              </div>
+              {oauthStatus === "success" && (
+                <div>
+                  <label className="block text-sm text-[var(--color-text-muted)] mb-1">
+                    Paste API Key from OpenAI
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showKey ? "text" : "password"}
+                      value={apiKey}
+                      onChange={(e) => setApiKey(e.target.value)}
+                      placeholder="sk-..."
+                      className={`${inputClass} pr-10`}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowKey(!showKey)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)] hover:text-[var(--color-text)] text-xs"
+                    >
+                      {showKey ? "Hide" : "Show"}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {authMethod === "setup_token" && provider === "anthropic" && (
+            <div className="space-y-3">
+              <div className="px-3 py-3 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)]">
+                <p className="text-xs text-[var(--color-text-muted)] mb-3">
+                  Get a setup token from the Anthropic Console. This is a one-time token
+                  used to authenticate your account.
+                </p>
+                <button
+                  type="button"
+                  onClick={handleOpenAnthropicConsole}
+                  className="w-full px-3 py-2 text-sm rounded-lg bg-[#d97706] text-white hover:opacity-90 transition-opacity"
+                >
+                  Open Anthropic Console
+                </button>
+              </div>
+              <div>
+                <label className="block text-sm text-[var(--color-text-muted)] mb-1">
+                  Setup Token
+                </label>
+                <div className="relative">
+                  <input
+                    type={showToken ? "text" : "password"}
+                    value={setupToken}
+                    onChange={(e) => setSetupToken(e.target.value)}
+                    placeholder="Paste setup token from Anthropic Console"
+                    className={`${inputClass} pr-10`}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowToken(!showToken)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)] hover:text-[var(--color-text)] text-xs"
+                  >
+                    {showToken ? "Hide" : "Show"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* API Protocol */}
           <div>
@@ -148,7 +331,7 @@ export function AddModelDialog() {
             <select
               value={apiProtocol}
               onChange={(e) => setApiProtocol(e.target.value)}
-              className="w-full bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm text-[var(--color-text)] focus:outline-none focus:border-[var(--color-accent)]"
+              className={inputClass}
             >
               {API_PROTOCOLS.map((p) => (
                 <option key={p} value={p}>{p}</option>
@@ -164,7 +347,7 @@ export function AddModelDialog() {
               value={baseUrl}
               onChange={(e) => setBaseUrl(e.target.value)}
               placeholder="https://api.example.com/v1"
-              className="w-full bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm text-[var(--color-text)] placeholder:text-[var(--color-text-muted)]/50 focus:outline-none focus:border-[var(--color-accent)]"
+              className={inputClass}
             />
           </div>
 

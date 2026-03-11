@@ -26,8 +26,9 @@ function BlinkingCursor() {
 }
 
 function WelcomeScreen() {
-  const setShowQuickConfig = useSettingsStore((s) => s.setShowQuickConfig);
   const customModels = useSettingsStore((s) => s.customModels);
+  const selectedModelId = useSettingsStore((s) => s.selectedModelId);
+  const setShowQuickConfig = useSettingsStore((s) => s.setShowQuickConfig);
   const setCurrentPage = useAppStore((s) => s.setCurrentPage);
   const setActiveSection = useSettingsStore((s) => s.setActiveSection);
 
@@ -37,6 +38,9 @@ function WelcomeScreen() {
     setActiveSection("models");
     setCurrentPage("settings");
   };
+
+  // Find current model display name
+  const currentModel = customModels.find((m) => m.id === selectedModelId) ?? customModels[0];
 
   return (
     <div className="flex flex-col items-center justify-center h-full gap-6 px-4">
@@ -49,11 +53,55 @@ function WelcomeScreen() {
         </p>
       </div>
 
-      {/* Model setup reminder */}
+      {/* When models exist: show current model + quick setup */}
+      {hasModel && (
+        <div className="flex flex-col items-center gap-3 w-80">
+          {/* Current model badge */}
+          <button
+            onClick={goToModelSettings}
+            className="w-full px-4 py-3 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)] hover:border-[var(--color-accent)] transition-colors text-left"
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs text-[var(--color-text-muted)]">Current Model</p>
+                <p className="text-sm font-medium text-[var(--color-text)] mt-0.5">
+                  {currentModel?.displayName ?? "Not selected"}
+                </p>
+              </div>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-[var(--color-text-muted)]">
+                <path d="M9 18l6-6-6-6" />
+              </svg>
+            </div>
+          </button>
+
+          {/* Quick Setup card */}
+          <button
+            onClick={() => setShowQuickConfig(true)}
+            className="w-full px-4 py-3 rounded-xl bg-[var(--color-accent)]/10 border border-[var(--color-accent)]/30 hover:border-[var(--color-accent)] transition-colors text-left"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-[var(--color-accent)]/20 flex items-center justify-center text-[var(--color-accent)]">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 20h9" />
+                  <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-sm font-medium text-[var(--color-accent)]">Quick Setup</h3>
+                <p className="text-xs text-[var(--color-text-muted)] mt-0.5">
+                  Configure your name, role, and workspace
+                </p>
+              </div>
+            </div>
+          </button>
+        </div>
+      )}
+
+      {/* When no models: show setup reminder */}
       {!hasModel && (
         <button
           onClick={goToModelSettings}
-          className="w-72 p-4 rounded-xl bg-[var(--color-warning)]/10 border border-[var(--color-warning)]/30 hover:border-[var(--color-warning)] transition-colors text-left group"
+          className="w-80 p-4 rounded-xl bg-[var(--color-warning)]/10 border border-[var(--color-warning)]/30 hover:border-[var(--color-warning)] transition-colors text-left group"
         >
           <h3 className="text-sm font-medium text-[var(--color-warning)]">
             Set Up a Model
