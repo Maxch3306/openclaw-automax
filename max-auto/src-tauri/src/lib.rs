@@ -15,6 +15,7 @@ pub fn run() {
             commands::gateway::stop_gateway,
             commands::gateway::gateway_status,
             commands::gateway::get_gateway_token,
+            commands::gateway::run_doctor,
             // System
             commands::system::get_platform_info,
             commands::system::check_node,
@@ -25,6 +26,10 @@ pub fn run() {
             // Config
             commands::config::read_config,
             commands::config::write_config,
+            // Pairing
+            commands::pairing::list_pairing_requests,
+            commands::pairing::approve_pairing_request,
+            commands::pairing::reject_pairing_request,
         ])
         .setup(|app| {
             tray::menu::setup_tray(app)?;

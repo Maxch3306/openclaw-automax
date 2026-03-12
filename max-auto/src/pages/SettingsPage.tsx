@@ -1,19 +1,32 @@
-import { useSettingsStore, type SettingsSection } from "../stores/settings-store";
-import { useAppStore } from "../stores/app-store";
+import {
+  Settings,
+  Puzzle,
+  Plug,
+  BookOpen,
+  MessageCircle,
+  FolderOpen,
+  Shield,
+  Mail,
+  Info,
+  ArrowLeft,
+} from "lucide-react";
+import { type ReactNode } from "react";
+import { GeneralSection } from "../components/settings/GeneralSection";
+import { IMChannelsSection } from "../components/settings/IMChannelsSection";
 import { ModelsAndApiSection } from "../components/settings/ModelsAndApiSection";
+import { useAppStore } from "../stores/app-store";
+import { useSettingsStore, type SettingsSection } from "../stores/settings-store";
 
-const NAV_ITEMS: { key: SettingsSection; label: string; icon: string }[] = [
-  { key: "general", label: "General", icon: "⚙" },
-  { key: "usage", label: "Usage Stats", icon: "📊" },
-  { key: "credits", label: "Credits", icon: "🔗" },
-  { key: "models", label: "Models & API", icon: "🧩" },
-  { key: "mcp", label: "MCP Services", icon: "🔌" },
-  { key: "skills", label: "Skills", icon: "📖" },
-  { key: "im-channels", label: "IM Channels", icon: "💬" },
-  { key: "workspace", label: "Workspace", icon: "📁" },
-  { key: "privacy", label: "Data & Privacy", icon: "🛡" },
-  { key: "feedback", label: "Feedback", icon: "✉" },
-  { key: "about", label: "About", icon: "ℹ" },
+const NAV_ITEMS: { key: SettingsSection; label: string; icon: ReactNode }[] = [
+  { key: "general", label: "General", icon: <Settings size={16} /> },
+  { key: "models", label: "Models & API", icon: <Puzzle size={16} /> },
+  { key: "mcp", label: "MCP Services", icon: <Plug size={16} /> },
+  { key: "skills", label: "Skills", icon: <BookOpen size={16} /> },
+  { key: "im-channels", label: "Channels", icon: <MessageCircle size={16} /> },
+  { key: "workspace", label: "Workspace", icon: <FolderOpen size={16} /> },
+  { key: "privacy", label: "Data & Privacy", icon: <Shield size={16} /> },
+  { key: "feedback", label: "Feedback", icon: <Mail size={16} /> },
+  { key: "about", label: "About", icon: <Info size={16} /> },
 ];
 
 function SectionPlaceholder({ label }: { label: string }) {
@@ -26,8 +39,12 @@ function SectionPlaceholder({ label }: { label: string }) {
 
 function renderSection(section: SettingsSection) {
   switch (section) {
+    case "general":
+      return <GeneralSection />;
     case "models":
       return <ModelsAndApiSection />;
+    case "im-channels":
+      return <IMChannelsSection />;
     default: {
       const item = NAV_ITEMS.find((n) => n.key === section);
       return <SectionPlaceholder label={item?.label ?? section} />;
@@ -48,7 +65,7 @@ export function SettingsPage() {
           onClick={() => setCurrentPage("home")}
           className="flex items-center gap-2 px-4 py-3 text-sm text-[var(--color-accent)] hover:bg-[var(--color-surface-hover)] transition-colors"
         >
-          <span>←</span>
+          <ArrowLeft size={14} />
           <span>Back to App</span>
         </button>
         <div className="flex-1 px-2 py-1">
@@ -70,9 +87,7 @@ export function SettingsPage() {
       </aside>
 
       {/* Content area */}
-      <div className="flex-1 overflow-y-auto">
-        {renderSection(activeSection)}
-      </div>
+      <div className="flex-1 overflow-y-auto">{renderSection(activeSection)}</div>
     </div>
   );
 }

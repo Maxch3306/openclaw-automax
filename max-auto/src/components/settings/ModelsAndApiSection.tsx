@@ -1,29 +1,76 @@
-import { useEffect } from "react";
-import { useSettingsStore } from "../../stores/settings-store";
-import { useAppStore } from "../../stores/app-store";
+import { RefreshCw } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { gateway } from "../../api/gateway-client";
+import { useAppStore } from "../../stores/app-store";
+import { useChatStore } from "../../stores/chat-store";
+import { useSettingsStore, type CustomModel } from "../../stores/settings-store";
 import { AddModelDialog } from "./AddModelDialog";
 
 export function ModelsAndApiSection() {
+  const models = useSettingsStore((s) => s.models);
   const customModels = useSettingsStore((s) => s.customModels);
-  const selectedModelId = useSettingsStore((s) => s.selectedModelId);
+  const configuredProviders = useSettingsStore((s) => s.configuredProviders);
   const showAddDialog = useSettingsStore((s) => s.showAddModelDialog);
   const setShowAddDialog = useSettingsStore((s) => s.setShowAddModelDialog);
   const loadConfig = useSettingsStore((s) => s.loadConfig);
-  const setSelectedModelId = useSettingsStore((s) => s.setSelectedModelId);
+  const loadModels = useSettingsStore((s) => s.loadModels);
+  const removeCustomModel = useSettingsStore((s) => s.removeCustomModel);
+  const removeProvider = useSettingsStore((s) => s.removeProvider);
+  const defaultModelId = useSettingsStore((s) => s.defaultModelId);
+  const setDefaultModelId = useSettingsStore((s) => s.setDefaultModelId);
   const gatewayConnected = useAppStore((s) => s.gatewayConnected);
   const gatewayPort = useAppStore((s) => s.gatewayPort);
+  const setAgentModel = useChatStore((s) => s.setAgentModel);
 
   useEffect(() => {
-    loadConfig();
+    void loadConfig();
+    void loadModels();
   }, []);
 
   const handleReconnect = () => {
-    gateway.disconnect();
-    setTimeout(() => {
-      gateway.connect(gatewayPort);
-    }, 500);
+    gateway.reconnect();
   };
+
+  const [reloading, setReloading] = useState(false);
+  const handleReload = async () => {
+    setReloading(true);
+    try {
+      await loadConfig();
+      await loadModels();
+    } finally {
+      setReloading(false);
+    }
+  };
+
+  // Group models from models.list by configured provider
+  const modelsByProvider = useMemo(() => {
+    const map = new Map<string, typeof models>();
+    for (const m of models) {
+      if (!configuredProviders.has(m.provider)) {
+        continue;
+      }
+      const list = map.get(m.provider) ?? [];
+      list.push(m);
+      map.set(m.provider, list);
+    }
+    return map;
+  }, [models, configuredProviders]);
+
+  // Providers that have models.list entries (built-in with auth)
+  const builtInProviderKeys = Array.from(configuredProviders).filter((key) =>
+    modelsByProvider.has(key),
+  );
+
+  // Group custom models by baseUrl (provider)
+  const customProviderGroups = useMemo(() => {
+    const map = new Map<string, CustomModel[]>();
+    for (const m of customModels) {
+      const list = map.get(m.baseUrl) ?? [];
+      list.push(m);
+      map.set(m.baseUrl, list);
+    }
+    return map;
+  }, [customModels]);
 
   return (
     <div className="max-w-2xl mx-auto p-6">
@@ -37,56 +84,175 @@ export function ModelsAndApiSection() {
         </button>
       </div>
 
-      {/* Built-in models */}
-      <section className="mb-6">
-        <h2 className="text-sm font-medium text-[var(--color-text-muted)] mb-3">Built-in Models</h2>
-        <div className="space-y-2">
-          <p className="text-sm text-[var(--color-text-muted)] py-2">
-            Built-in models require an API Key to use. Please add and configure them via "Add Custom Model".
-          </p>
-        </div>
-      </section>
-
-      {/* Custom models */}
+      {/* Configured providers */}
       <section className="mb-6">
         <div className="flex items-center justify-between mb-3">
-          <h2 className="text-sm font-medium text-[var(--color-text-muted)]">Custom Models</h2>
+          <div className="flex items-center gap-2">
+            <h2 className="text-sm font-medium text-[var(--color-text-muted)]">Providers</h2>
+            <button
+              onClick={handleReload}
+              disabled={reloading}
+              className="p-1 rounded text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-hover)] transition-colors disabled:opacity-50"
+              title="Reload providers"
+            >
+              <RefreshCw size={14} className={reloading ? "animate-spin" : ""} />
+            </button>
+          </div>
           <button
             onClick={() => setShowAddDialog(true)}
-            className="text-sm px-3 py-1.5 rounded-lg bg-[var(--color-warning)] text-white hover:opacity-90 transition-opacity"
+            className="text-sm px-3 py-1.5 rounded-lg bg-[var(--color-accent)] text-white hover:opacity-90 transition-opacity"
           >
-            Add Custom Model
+            + Set up Provider
           </button>
         </div>
-        <div className="space-y-2">
-          {customModels.map((model) => (
-            <div
-              key={model.id}
-              className="flex items-center justify-between p-3 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)]"
+
+        {configuredProviders.size === 0 && customModels.length === 0 ? (
+          <div className="text-center py-8 rounded-lg border border-dashed border-[var(--color-border)]">
+            <p className="text-sm text-[var(--color-text-muted)] mb-3">
+              No providers configured yet
+            </p>
+            <button
+              onClick={() => setShowAddDialog(true)}
+              className="text-sm px-4 py-2 rounded-lg bg-[var(--color-accent)] text-white hover:opacity-90 transition-opacity"
             >
-              <div>
-                <span className="text-sm text-[var(--color-text)]">{model.displayName || model.id}</span>
-                <span className="ml-2 text-xs text-[var(--color-text-muted)]">{model.provider}</span>
-              </div>
-              <div className="flex items-center gap-3">
-                {selectedModelId === model.id && (
-                  <span className="text-xs px-2 py-0.5 rounded bg-[var(--color-success)]/20 text-[var(--color-success)]">
-                    Selected
-                  </span>
-                )}
-                <button
-                  onClick={() => setSelectedModelId(model.id)}
-                  className="text-xs text-[var(--color-warning)] hover:underline"
+              + Set up Provider
+            </button>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {/* Built-in providers (from models.list, auth configured) */}
+            {builtInProviderKeys.map((provKey) => {
+              const providerModels = modelsByProvider.get(provKey) ?? [];
+              return (
+                <div
+                  key={provKey}
+                  className="rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)] overflow-hidden"
                 >
-                  Edit
-                </button>
+                  <div className="flex items-center justify-between px-3 py-2.5">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium text-[var(--color-text)]">
+                        {provKey}
+                      </span>
+                      <span className="text-xs px-1.5 py-0.5 rounded bg-[var(--color-success)]/20 text-[var(--color-success)]">
+                        {providerModels.length} model{providerModels.length !== 1 ? "s" : ""}
+                      </span>
+                    </div>
+                    <button
+                      onClick={async () => {
+                        try {
+                          await removeProvider(provKey);
+                        } catch (err) {
+                          console.error("[settings] removeProvider failed:", err);
+                        }
+                      }}
+                      className="text-xs text-[var(--color-error)] hover:underline"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                  {providerModels.length > 0 && (
+                    <div className="border-t border-[var(--color-border)] px-3 py-2 space-y-1">
+                      {providerModels.map((m) => {
+                        const qualifiedId = `${provKey}/${m.id}`;
+                        const isDefault = defaultModelId === qualifiedId;
+                        return (
+                          <div key={m.id} className="flex items-center justify-between py-1">
+                            <span className="text-xs text-[var(--color-text-muted)] truncate">
+                              {m.name || m.id}
+                            </span>
+                            <div className="flex items-center gap-2 shrink-0">
+                              {isDefault ? (
+                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--color-success)]/20 text-[var(--color-success)]">
+                                  Default
+                                </span>
+                              ) : (
+                                <button
+                                  onClick={async () => {
+                                    await setAgentModel("main", qualifiedId);
+                                    setDefaultModelId(qualifiedId);
+                                  }}
+                                  className="text-[10px] px-1.5 py-0.5 rounded border border-[var(--color-border)] text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:border-[var(--color-accent)] transition-colors"
+                                >
+                                  Set Default
+                                </button>
+                              )}
+                              {m.reasoning && (
+                                <span className="text-[10px] px-1 py-0.5 rounded bg-[var(--color-warning)]/20 text-[var(--color-warning)]">
+                                  Reasoning
+                                </span>
+                              )}
+                              {m.contextWindow && (
+                                <span className="text-[10px] text-[var(--color-text-muted)]">
+                                  {Math.round(m.contextWindow / 1000)}k
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+
+            {/* Custom providers (grouped by baseUrl, same card style as built-in) */}
+            {Array.from(customProviderGroups.entries()).map(([baseUrl, group]) => (
+              <div
+                key={baseUrl}
+                className="rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)] overflow-hidden"
+              >
+                <div className="flex items-center justify-between px-3 py-2.5">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-[var(--color-text)]">{baseUrl}</span>
+                    <span className="text-xs px-1.5 py-0.5 rounded bg-[var(--color-accent)]/20 text-[var(--color-accent)]">
+                      {group.length} model{group.length !== 1 ? "s" : ""}
+                    </span>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--color-warning)]/20 text-[var(--color-warning)]">
+                      Custom
+                    </span>
+                  </div>
+                  <button
+                    onClick={async () => {
+                      try {
+                        for (const m of group) {
+                          await removeCustomModel(m.id);
+                        }
+                      } catch (err) {
+                        console.error("[settings] removeCustomProvider failed:", err);
+                      }
+                    }}
+                    className="text-xs text-[var(--color-error)] hover:underline"
+                  >
+                    Remove
+                  </button>
+                </div>
+                <div className="border-t border-[var(--color-border)] px-3 py-2 space-y-1">
+                  {group.map((m) => (
+                    <div key={m.id} className="flex items-center justify-between py-1">
+                      <div className="flex items-center gap-2 truncate">
+                        <span className="text-xs text-[var(--color-text-muted)] truncate">
+                          {m.displayName || m.id}
+                        </span>
+                        {m.displayName && m.displayName !== m.id && (
+                          <span className="text-[10px] text-[var(--color-text-muted)]/50 truncate">
+                            {m.id}
+                          </span>
+                        )}
+                      </div>
+                      <button
+                        onClick={() => setShowAddDialog(true, m)}
+                        className="text-[10px] px-1.5 py-0.5 rounded border border-[var(--color-border)] text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:border-[var(--color-accent)] transition-colors shrink-0"
+                      >
+                        Edit
+                      </button>
+                    </div>
+                  ))}
+                </div>
               </div>
-            </div>
-          ))}
-          {customModels.length === 0 && (
-            <p className="text-sm text-[var(--color-text-muted)] py-2">No custom models yet</p>
-          )}
-        </div>
+            ))}
+          </div>
+        )}
       </section>
 
       {/* Gateway URL */}
@@ -109,12 +275,6 @@ export function ModelsAndApiSection() {
                 className="text-xs px-3 py-1.5 rounded-lg border border-[var(--color-border)] text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)] transition-colors"
               >
                 Reconnect
-              </button>
-              <button
-                onClick={handleReconnect}
-                className="text-xs px-3 py-1.5 rounded-lg bg-[var(--color-warning)] text-white hover:opacity-90 transition-opacity"
-              >
-                Reset Connection
               </button>
             </div>
           </div>

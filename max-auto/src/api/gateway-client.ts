@@ -44,6 +44,7 @@ export class GatewayClient {
   private _connected = false;
   private _url = "";
   private _token = "";
+  private _intentionalClose = false;
   private onStatusChange: ((connected: boolean) => void) | null = null;
 
   // Debug log buffer
@@ -55,7 +56,9 @@ export class GatewayClient {
     const entry = `[${ts}] ${msg}`;
     console.log("[gateway]", msg);
     this.debugLog.push(entry);
-    if (this.debugLog.length > 50) this.debugLog.shift();
+    if (this.debugLog.length > 200) {
+      this.debugLog.shift();
+    }
     this.onDebugUpdate?.();
   }
 
@@ -68,13 +71,20 @@ export class GatewayClient {
   }
 
   get wsState(): string {
-    if (!this.ws) return "NO_SOCKET";
+    if (!this.ws) {
+      return "NO_SOCKET";
+    }
     switch (this.ws.readyState) {
-      case WebSocket.CONNECTING: return "CONNECTING";
-      case WebSocket.OPEN: return "OPEN";
-      case WebSocket.CLOSING: return "CLOSING";
-      case WebSocket.CLOSED: return "CLOSED";
-      default: return `UNKNOWN(${this.ws.readyState})`;
+      case WebSocket.CONNECTING:
+        return "CONNECTING";
+      case WebSocket.OPEN:
+        return "OPEN";
+      case WebSocket.CLOSING:
+        return "CLOSING";
+      case WebSocket.CLOSED:
+        return "CLOSED";
+      default:
+        return `UNKNOWN(${String(this.ws.readyState)})`;
     }
   }
 
@@ -87,12 +97,24 @@ export class GatewayClient {
   }
 
   connect(port = 18789, token = "") {
-    this._url = `ws://127.0.0.1:${port}/`;
+    const url = `ws://127.0.0.1:${port}/`;
+    // Skip if already connected/connecting to same endpoint
+    if (
+      this._url === url &&
+      this._token === token &&
+      this.ws &&
+      this.ws.readyState <= WebSocket.OPEN
+    ) {
+      this.log("connect() skipped — already connected/connecting to same endpoint");
+      return;
+    }
+    this._url = url;
     this._token = token;
     this.doConnect();
   }
 
   disconnect() {
+    this._intentionalClose = true;
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
@@ -102,6 +124,13 @@ export class GatewayClient {
       this.ws = null;
     }
     this.setConnected(false);
+  }
+
+  reconnect() {
+    this.disconnect();
+    if (this._url) {
+      this.doConnect();
+    }
   }
 
   async request<T = unknown>(method: string, params?: unknown, timeoutMs = 30000): Promise<T> {
@@ -124,7 +153,9 @@ export class GatewayClient {
         timer,
       });
 
-      this.ws!.send(JSON.stringify(frame));
+      const payload = JSON.stringify(frame);
+      this.log(`SEND: ${payload.slice(0, 300)}`);
+      this.ws!.send(payload);
     });
   }
 
@@ -139,6 +170,11 @@ export class GatewayClient {
   }
 
   private doConnect() {
+    this._intentionalClose = false;
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
     if (this.ws) {
       this.ws.close();
     }
@@ -148,18 +184,22 @@ export class GatewayClient {
     this.ws = ws;
     let handshakeDone = false;
 
-    ws.onopen = () => {
+    ws.addEventListener("open", () => {
       this.log("WebSocket opened, waiting for challenge...");
-    };
+    });
 
-    ws.onmessage = (ev) => {
+    ws.addEventListener("message", (ev) => {
       try {
         const raw = typeof ev.data === "string" ? ev.data : String(ev.data);
         this.log(`RECV: ${raw.slice(0, 300)}`);
         const frame = JSON.parse(raw) as Frame | { type: string; [k: string]: unknown };
 
         // Phase 1: Server sends connect.challenge event with nonce
-        if (!handshakeDone && frame.type === "event" && (frame as EventFrame).event === "connect.challenge") {
+        if (
+          !handshakeDone &&
+          frame.type === "event" &&
+          (frame as EventFrame).event === "connect.challenge"
+        ) {
           this.log("Got challenge, sending connect request...");
           const connectFrame = {
             type: "req",
@@ -207,25 +247,29 @@ export class GatewayClient {
           this.handleEvent(frame as EventFrame);
         }
       } catch (err) {
-        this.log(`Parse error: ${err}`);
+        this.log(`Parse error: ${err instanceof Error ? err.message : String(err)}`);
       }
-    };
+    });
 
-    ws.onclose = (ev) => {
+    ws.addEventListener("close", (ev) => {
       this.log(`WebSocket closed: code=${ev.code} reason="${ev.reason}"`);
       this.setConnected(false);
       this.rejectAllPending("Connection closed");
-      this.scheduleReconnect();
-    };
+      if (!this._intentionalClose) {
+        this.scheduleReconnect();
+      }
+    });
 
-    ws.onerror = (ev) => {
-      this.log(`WebSocket error: ${ev}`);
-    };
+    ws.addEventListener("error", () => {
+      this.log("WebSocket error");
+    });
   }
 
   private handleResponse(frame: ResponseFrame) {
     const req = this.pending.get(frame.id);
-    if (!req) return;
+    if (!req) {
+      return;
+    }
 
     this.pending.delete(frame.id);
     clearTimeout(req.timer);
@@ -238,6 +282,13 @@ export class GatewayClient {
   }
 
   private handleEvent(frame: EventFrame) {
+    // Log chat-event and agent-event details for debugging
+    if (frame.event === "chat" || frame.event === "agent") {
+      const p = frame.payload as Record<string, unknown> | undefined;
+      this.log(
+        `EVENT ${frame.event}: state=${String(p?.state)} runId=${String(p?.runId)} seq=${frame.seq}`,
+      );
+    }
     const handlers = this.eventHandlers.get(frame.event);
     if (handlers) {
       for (const h of handlers) {
@@ -266,7 +317,9 @@ export class GatewayClient {
   }
 
   private scheduleReconnect() {
-    if (this.reconnectTimer) return;
+    if (this.reconnectTimer) {
+      return;
+    }
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
       this.doConnect();

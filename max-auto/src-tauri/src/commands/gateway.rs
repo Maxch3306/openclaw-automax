@@ -311,3 +311,46 @@ pub async fn gateway_status(state: State<'_, GatewayProcess>) -> Result<GatewayS
         })
     }
 }
+
+/// Run `openclaw doctor` and return the output
+#[tauri::command]
+pub async fn run_doctor() -> Result<String, String> {
+    let node = node_binary();
+    let entry = openclaw_js_entry();
+    let base_dir = maxauto_dir();
+    let config_path = base_dir.join("config").join("openclaw.json");
+
+    if !entry.exists() {
+        return Err("OpenClaw not installed".into());
+    }
+
+    let output = tokio::process::Command::new(&node)
+        .arg(&entry)
+        .arg("doctor")
+        .env("OPENCLAW_STATE_DIR", base_dir.to_str().unwrap())
+        .env("OPENCLAW_CONFIG_PATH", config_path.to_str().unwrap())
+        .output()
+        .await
+        .map_err(|e| format!("Failed to run doctor: {}", e))?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+
+    let mut result = stdout;
+    if !stderr.is_empty() {
+        if !result.is_empty() {
+            result.push('\n');
+        }
+        result.push_str(&stderr);
+    }
+
+    if result.trim().is_empty() {
+        result = if output.status.success() {
+            "Doctor check passed with no output.".into()
+        } else {
+            format!("Doctor exited with code: {}", output.status)
+        };
+    }
+
+    Ok(result)
+}

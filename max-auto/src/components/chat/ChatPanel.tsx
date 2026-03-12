@@ -1,7 +1,9 @@
+import { Shell, ChevronRight } from "lucide-react";
 import { useEffect, useRef } from "react";
+import { useAppStore } from "../../stores/app-store";
 import { useChatStore, type ChatMessage as ChatMsg } from "../../stores/chat-store";
 import { useSettingsStore } from "../../stores/settings-store";
-import { useAppStore } from "../../stores/app-store";
+import { AddModelDialog } from "../settings/AddModelDialog";
 import { ChatInput } from "./ChatInput";
 
 function ChatMessage({ msg }: { msg: ChatMsg }) {
@@ -15,102 +17,87 @@ function ChatMessage({ msg }: { msg: ChatMsg }) {
             : "bg-[var(--color-surface)] text-[var(--color-text)] border border-[var(--color-border)]"
         }`}
       >
-        {msg.content || (msg.streaming ? <BlinkingCursor /> : "")}
+        {msg.content || (msg.streaming ? <TypingIndicator /> : "")}
       </div>
     </div>
   );
 }
 
-function BlinkingCursor() {
-  return <span className="inline-block w-2 h-4 bg-[var(--color-text-muted)] animate-pulse" />;
+function TypingIndicator() {
+  return (
+    <div className="flex items-center gap-1 py-1 px-1">
+      <span className="w-2 h-2 rounded-full bg-[var(--color-text-muted)] animate-bounce [animation-delay:0ms]" />
+      <span className="w-2 h-2 rounded-full bg-[var(--color-text-muted)] animate-bounce [animation-delay:150ms]" />
+      <span className="w-2 h-2 rounded-full bg-[var(--color-text-muted)] animate-bounce [animation-delay:300ms]" />
+    </div>
+  );
 }
 
 function WelcomeScreen() {
-  const customModels = useSettingsStore((s) => s.customModels);
-  const selectedModelId = useSettingsStore((s) => s.selectedModelId);
-  const setShowQuickConfig = useSettingsStore((s) => s.setShowQuickConfig);
+  const models = useSettingsStore((s) => s.models);
+  const configuredProviders = useSettingsStore((s) => s.configuredProviders);
+  const showAddDialog = useSettingsStore((s) => s.showAddModelDialog);
+  const setShowAddDialog = useSettingsStore((s) => s.setShowAddModelDialog);
   const setCurrentPage = useAppStore((s) => s.setCurrentPage);
   const setActiveSection = useSettingsStore((s) => s.setActiveSection);
 
-  const hasModel = customModels.length > 0;
+  const hasProvider = configuredProviders.size > 0;
 
   const goToModelSettings = () => {
     setActiveSection("models");
     setCurrentPage("settings");
   };
 
-  // Find current model display name
-  const currentModel = customModels.find((m) => m.id === selectedModelId) ?? customModels[0];
+  // Count available models from configured providers
+  const availableModels = models.filter((m) => configuredProviders.has(m.provider));
+  const providerCount = configuredProviders.size;
 
   return (
     <div className="flex flex-col items-center justify-center h-full gap-6 px-4">
       {/* Branding */}
       <div className="text-center">
-        <div className="text-4xl mb-3">🦞</div>
+        <Shell size={40} className="text-[var(--color-accent)] mb-3" />
         <h1 className="text-xl font-semibold text-[var(--color-text)]">AutoClaw</h1>
         <p className="text-sm text-[var(--color-text-muted)] mt-2 max-w-md">
           Describe your goal, and AutoClaw will execute step by step with real-time feedback
         </p>
       </div>
 
-      {/* When models exist: show current model + quick setup */}
-      {hasModel && (
+      {/* When providers are configured: show provider summary + quick setup */}
+      {hasProvider && (
         <div className="flex flex-col items-center gap-3 w-80">
-          {/* Current model badge */}
           <button
             onClick={goToModelSettings}
             className="w-full px-4 py-3 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)] hover:border-[var(--color-accent)] transition-colors text-left"
           >
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs text-[var(--color-text-muted)]">Current Model</p>
+                <p className="text-xs text-[var(--color-text-muted)]">Configured Providers</p>
                 <p className="text-sm font-medium text-[var(--color-text)] mt-0.5">
-                  {currentModel?.displayName ?? "Not selected"}
+                  {providerCount} provider{providerCount !== 1 ? "s" : ""} ·{" "}
+                  {availableModels.length} model{availableModels.length !== 1 ? "s" : ""}
                 </p>
               </div>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-[var(--color-text-muted)]">
-                <path d="M9 18l6-6-6-6" />
-              </svg>
-            </div>
-          </button>
-
-          {/* Quick Setup card */}
-          <button
-            onClick={() => setShowQuickConfig(true)}
-            className="w-full px-4 py-3 rounded-xl bg-[var(--color-accent)]/10 border border-[var(--color-accent)]/30 hover:border-[var(--color-accent)] transition-colors text-left"
-          >
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg bg-[var(--color-accent)]/20 flex items-center justify-center text-[var(--color-accent)]">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M12 20h9" />
-                  <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
-                </svg>
-              </div>
-              <div>
-                <h3 className="text-sm font-medium text-[var(--color-accent)]">Quick Setup</h3>
-                <p className="text-xs text-[var(--color-text-muted)] mt-0.5">
-                  Configure your name, role, and workspace
-                </p>
-              </div>
+              <ChevronRight size={16} className="text-[var(--color-text-muted)]" />
             </div>
           </button>
         </div>
       )}
 
-      {/* When no models: show setup reminder */}
-      {!hasModel && (
+      {/* When no providers: show setup prompt */}
+      {!hasProvider && (
         <button
-          onClick={goToModelSettings}
+          onClick={() => setShowAddDialog(true)}
           className="w-80 p-4 rounded-xl bg-[var(--color-warning)]/10 border border-[var(--color-warning)]/30 hover:border-[var(--color-warning)] transition-colors text-left group"
         >
-          <h3 className="text-sm font-medium text-[var(--color-warning)]">
-            Set Up a Model
-          </h3>
+          <h3 className="text-sm font-medium text-[var(--color-warning)]">Set up a Provider</h3>
           <p className="text-xs text-[var(--color-text-muted)] mt-1">
-            No model configured yet. Add a model with an API key to start chatting.
+            No provider configured yet. Add a provider with an API key to start chatting.
           </p>
         </button>
       )}
+
+      {showAddDialog && <AddModelDialog />}
     </div>
   );
 }

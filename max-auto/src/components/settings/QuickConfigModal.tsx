@@ -1,10 +1,18 @@
+import { Shield, Sparkles } from "lucide-react";
 import { useState } from "react";
-import { useSettingsStore } from "../../stores/settings-store";
 import { gateway } from "../../api/gateway-client";
 import { useChatStore } from "../../stores/chat-store";
+import { useSettingsStore } from "../../stores/settings-store";
 
 const SCENARIOS = [
-  "Coding", "Writing", "Product", "Data Analysis", "Design", "DevOps", "Research", "Marketing",
+  "Coding",
+  "Writing",
+  "Product",
+  "Data Analysis",
+  "Design",
+  "DevOps",
+  "Research",
+  "Marketing",
 ];
 
 export function QuickConfigModal() {
@@ -21,13 +29,13 @@ export function QuickConfigModal() {
   const [saving, setSaving] = useState(false);
 
   const toggleScenario = (s: string) => {
-    setSelectedScenarios((prev) =>
-      prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]
-    );
+    setSelectedScenarios((prev) => (prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]));
   };
 
   const handleSave = async () => {
-    if (!selectedAgentId) return;
+    if (!selectedAgentId) {
+      return;
+    }
     setSaving(true);
     try {
       // Save user info to USER.md
@@ -87,7 +95,9 @@ export function QuickConfigModal() {
         <div className="px-6 py-4 space-y-4">
           {/* User name */}
           <div>
-            <label className="block text-sm text-[var(--color-text)] mb-1">What should we call you?</label>
+            <label className="block text-sm text-[var(--color-text)] mb-1">
+              What should we call you?
+            </label>
             <input
               type="text"
               value={userName}
@@ -99,7 +109,9 @@ export function QuickConfigModal() {
 
           {/* User role */}
           <div>
-            <label className="block text-sm text-[var(--color-text)] mb-1">Your role (optional)</label>
+            <label className="block text-sm text-[var(--color-text)] mb-1">
+              Your role (optional)
+            </label>
             <input
               type="text"
               value={userRole}
@@ -111,7 +123,9 @@ export function QuickConfigModal() {
 
           {/* Agent nickname */}
           <div>
-            <label className="block text-sm text-[var(--color-text)] mb-1">What should I be called? (optional)</label>
+            <label className="block text-sm text-[var(--color-text)] mb-1">
+              What should I be called? (optional)
+            </label>
             <input
               type="text"
               value={agentNickname}
@@ -123,7 +137,9 @@ export function QuickConfigModal() {
 
           {/* Usage scenarios */}
           <div>
-            <label className="block text-sm text-[var(--color-text)] mb-2">Usage Scenarios (select multiple)</label>
+            <label className="block text-sm text-[var(--color-text)] mb-2">
+              Usage Scenarios (select multiple)
+            </label>
             <div className="flex flex-wrap gap-2">
               {SCENARIOS.map((s) => (
                 <button
@@ -165,7 +181,7 @@ export function QuickConfigModal() {
             {/* Limit file access */}
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <span className="text-sm">🛡</span>
+                <Shield size={16} />
                 <div>
                   <p className="text-sm text-[var(--color-text)]">Limit File Access</p>
                   <p className="text-xs text-[var(--color-text-muted)]">
@@ -190,7 +206,7 @@ export function QuickConfigModal() {
             {/* Optimize plan */}
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <span className="text-sm">✨</span>
+                <Sparkles size={16} />
                 <p className="text-sm text-[var(--color-text)]">Optimize Plan</p>
               </div>
               <button

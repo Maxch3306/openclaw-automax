@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { useChatStore } from "../../stores/chat-store";
+import { useSettingsStore } from "../../stores/settings-store";
 
 export function ChatInput() {
   const [text, setText] = useState("");
@@ -7,20 +8,55 @@ export function ChatInput() {
   const sendMessage = useChatStore((s) => s.sendMessage);
   const streaming = useChatStore((s) => s.streaming);
   const abortGeneration = useChatStore((s) => s.abortGeneration);
+  const selectedAgentId = useChatStore((s) => s.selectedAgentId);
+  const setAgentModel = useChatStore((s) => s.setAgentModel);
+
+  const models = useSettingsStore((s) => s.models);
+  const configuredProviders = useSettingsStore((s) => s.configuredProviders);
+  const defaultModelId = useSettingsStore((s) => s.defaultModelId);
+
+  // Only show models from configured providers
+  const availableModels = models.filter((m) => configuredProviders.has(m.provider));
+
+  const [selectedModelId, setSelectedModelId] = useState("");
+
+  // Set initial model: use default from config, or first available
+  useEffect(() => {
+    if (availableModels.length > 0 && !selectedModelId) {
+      if (defaultModelId) {
+        // Check if default model is in available models
+        const match = availableModels.find((m) => `${m.provider}/${m.id}` === defaultModelId);
+        if (match) {
+          setSelectedModelId(defaultModelId);
+          return;
+        }
+      }
+      const first = availableModels[0];
+      setSelectedModelId(`${first.provider}/${first.id}`);
+    }
+  }, [availableModels.length, defaultModelId]);
 
   useEffect(() => {
     textareaRef.current?.focus();
   }, []);
 
+  const handleModelChange = (modelId: string) => {
+    setSelectedModelId(modelId);
+    if (selectedAgentId) {
+      void setAgentModel(selectedAgentId, modelId);
+    }
+  };
+
   function handleSubmit() {
     if (streaming) {
-      abortGeneration();
+      void abortGeneration();
       return;
     }
-    if (!text.trim()) return;
-    sendMessage(text.trim());
+    if (!text.trim()) {
+      return;
+    }
+    void sendMessage(text.trim());
     setText("");
-    // Reset textarea height
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
     }
@@ -43,6 +79,24 @@ export function ChatInput() {
 
   return (
     <div className="border-t border-[var(--color-border)] p-3 bg-[var(--color-surface)]">
+      {/* Model selector row */}
+      {availableModels.length > 0 && (
+        <div className="flex items-center gap-2 mb-2">
+          <label className="text-xs text-[var(--color-text-muted)] shrink-0">Model</label>
+          <select
+            value={selectedModelId}
+            onChange={(e) => handleModelChange(e.target.value)}
+            className="bg-[var(--color-bg)] border border-[var(--color-border)] rounded-lg px-2 py-1 text-xs text-[var(--color-text)] focus:outline-none focus:border-[var(--color-accent)] max-w-xs truncate"
+          >
+            {availableModels.map((m) => (
+              <option key={`${m.provider}/${m.id}`} value={`${m.provider}/${m.id}`}>
+                {m.name || m.id} ({m.provider})
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+      {/* Input row */}
       <div className="flex items-end gap-2">
         <textarea
           ref={textareaRef}

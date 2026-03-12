@@ -1,7 +1,8 @@
+import { Plus, Settings } from "lucide-react";
 import { useEffect } from "react";
-import { useChatStore } from "../../stores/chat-store";
-import { useAppStore } from "../../stores/app-store";
 import { gateway } from "../../api/gateway-client";
+import { useAppStore } from "../../stores/app-store";
+import { useChatStore } from "../../stores/chat-store";
 
 export function ModelSelector() {
   const agents = useChatStore((s) => s.agents);
@@ -17,7 +18,8 @@ export function ModelSelector() {
       >
         {agents.map((a) => (
           <option key={a.agentId} value={a.agentId}>
-            {a.emoji ? `${a.emoji} ` : ""}{a.name}
+            {a.emoji ? `${a.emoji} ` : ""}
+            {a.name}
           </option>
         ))}
         {agents.length === 0 && <option value="">No agents</option>}
@@ -26,48 +28,78 @@ export function ModelSelector() {
   );
 }
 
+function formatTime(ts: number | null): string {
+  if (!ts) {
+    return "";
+  }
+  const d = new Date(ts);
+  const now = new Date();
+  const diffMs = now.getTime() - d.getTime();
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+  if (diffDays === 0) {
+    return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  } else if (diffDays === 1) {
+    return "Yesterday";
+  } else if (diffDays < 7) {
+    return d.toLocaleDateString([], { weekday: "short" });
+  }
+  return d.toLocaleDateString([], { month: "short", day: "numeric" });
+}
+
 export function Sidebar() {
-  const agents = useChatStore((s) => s.agents);
-  const selectedAgentId = useChatStore((s) => s.selectedAgentId);
-  const selectAgent = useChatStore((s) => s.selectAgent);
+  const sessions = useChatStore((s) => s.sessions);
+  const sessionKey = useChatStore((s) => s.sessionKey);
+  const switchSession = useChatStore((s) => s.switchSession);
+  const newSession = useChatStore((s) => s.newSession);
   const loadAgents = useChatStore((s) => s.loadAgents);
   const setCurrentPage = useAppStore((s) => s.setCurrentPage);
 
   useEffect(() => {
     if (gateway.connected) {
-      loadAgents();
+      void loadAgents();
     }
     const unsub = gateway.on("presence", () => {
-      loadAgents();
+      void loadAgents();
     });
     return unsub;
   }, []);
 
   return (
     <aside className="w-64 bg-[var(--color-surface)] border-r border-[var(--color-border)] flex flex-col">
-      <div className="p-4">
+      <div className="p-4 flex items-center justify-between">
         <h2 className="text-xs font-semibold text-[var(--color-text-muted)] uppercase tracking-wide">
-          Agents
+          Chats
         </h2>
+        <button
+          onClick={newSession}
+          title="New Chat"
+          className="p-1 rounded-md text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-hover)] transition-colors"
+        >
+          <Plus size={16} />
+        </button>
       </div>
       <div className="flex-1 overflow-y-auto px-2">
-        {agents.map((agent) => (
+        {sessions.map((s) => (
           <button
-            key={agent.agentId}
-            onClick={() => selectAgent(agent.agentId)}
-            className={`w-full text-left p-3 rounded-lg mb-1 text-sm transition-colors ${
-              selectedAgentId === agent.agentId
-                ? "bg-[var(--color-accent)]/10 border border-[var(--color-accent)]/30 text-[var(--color-text)]"
-                : "hover:bg-[var(--color-surface-hover)] text-[var(--color-text-muted)]"
+            key={s.key}
+            onClick={() => switchSession(s.key)}
+            className={`w-full text-left px-3 py-2 rounded-lg mb-0.5 transition-colors group ${
+              sessionKey === s.key
+                ? "bg-[var(--color-accent)]/10 border border-[var(--color-accent)]/30"
+                : "hover:bg-[var(--color-surface-hover)]"
             }`}
           >
-            {agent.emoji ? `${agent.emoji} ` : ""}{agent.name}
+            <div className="text-sm text-[var(--color-text)] truncate">{s.title}</div>
+            {s.updatedAt && (
+              <div className="text-[10px] text-[var(--color-text-muted)] mt-0.5">
+                {formatTime(s.updatedAt)}
+              </div>
+            )}
           </button>
         ))}
-        {agents.length === 0 && (
-          <p className="text-xs text-[var(--color-text-muted)] px-3 py-2">
-            Connecting to gateway...
-          </p>
+        {sessions.length === 0 && (
+          <p className="text-xs text-[var(--color-text-muted)] px-3 py-2">No conversations yet</p>
         )}
       </div>
       <ModelSelector />
@@ -77,10 +109,7 @@ export function Sidebar() {
           onClick={() => setCurrentPage("settings")}
           className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)] transition-colors"
         >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="12" cy="12" r="3" />
-            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
-          </svg>
+          <Settings size={16} />
           <span>Settings</span>
         </button>
       </div>
