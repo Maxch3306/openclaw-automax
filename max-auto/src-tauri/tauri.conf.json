@@ -47,6 +47,12 @@
   "plugins": {
     "shell": {
       "open": true
+    },
+    "updater": {
+      "endpoints": [
+        "https://github.com/Maxch3306/openclaw-maxauto/releases/latest/download/latest.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEZGREQzRTkzNjIzQkIyOTQKUldTVXNqdGlrejdkLzdXQzBtc0NUVlg0eUlOQ3lBSlFlOEV4OEF4SFFSNlBsUVNiTStQaHJYM24K"
     }
   }
 }
