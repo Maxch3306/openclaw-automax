@@ -1,0 +1,72 @@
+{
+    "models": {
+      "mode": "merge",
+      "providers": {
+        "bailian-coding-maxauto": {
+          "baseUrl": "https://coding.dashscope.aliyuncs.com/v1",
+          "apiKey": "YOUR_API_KEY",
+          "api": "openai-completions",
+          "models": [
+            {
+              "id": "qwen3.5-plus",
+              "name": "qwen3.5-plus",
+              "reasoning": false,
+              "input": ["text", "image"],
+              "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+              "contextWindow": 1000000,
+              "maxTokens": 65536,
+              "compat": {
+                "thinkingFormat": "qwen"
+              }
+            },
+            {
+              "id": "MiniMax-M2.5",
+              "name": "MiniMax-M2.5",
+              "reasoning": false,
+              "input": ["text"],
+              "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+              "contextWindow": 196608,
+              "maxTokens": 32768
+            },
+            {
+              "id": "glm-5",
+              "name": "glm-5",
+              "reasoning": false,
+              "input": ["text"],
+              "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+              "contextWindow": 202752,
+              "maxTokens": 16384,
+              "compat": {
+                "thinkingFormat": "qwen"
+              }
+            },
+            {
+              "id": "kimi-k2.5",
+              "name": "kimi-k2.5",
+              "reasoning": false,
+              "input": ["text", "image"],
+              "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+              "contextWindow": 262144,
+              "maxTokens": 32768,
+              "compat": {
+                "thinkingFormat": "qwen"
+              }
+            }
+          ]
+        }
+      }
+    },
+    "agents": {
+      "defaults": {
+        "model": {
+          "primary": "bailian-coding-maxauto/qwen3.5-plus"
+        },
+        "models": {
+          "bailian-coding-maxauto/qwen3.5-plus": {},
+          "bailian-coding-maxauto/MiniMax-M2.5": {},
+          "bailian-coding-maxauto/glm-5": {},
+          "bailian-coding-maxauto/kimi-k2.5": {}
+        }
+      }
+    }
+}

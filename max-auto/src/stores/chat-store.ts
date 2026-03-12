@@ -285,7 +285,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
             updatedAt: s.updatedAt ?? null,
           };
         })
-        .toSorted((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
+        .sort((a: { updatedAt: number | null }, b: { updatedAt: number | null }) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
 
       set({ sessions });
       console.log("[chat-store] loadSessions: loaded", sessions.length, "sessions");

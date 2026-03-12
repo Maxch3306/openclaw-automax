@@ -69,12 +69,16 @@ export function AppShell() {
       }
     });
 
+    // Timer for delayed error finalization (allows retry to cancel it)
+    let errorFinalizeTimer: ReturnType<typeof setTimeout> | null = null;
+
     // Listen for chat streaming events
     const unsubChat = gateway.on("chat", (payload) => {
       const data = payload as {
         runId?: string;
         sessionKey?: string;
         state?: string;
+        errorMessage?: string;
         message?: {
           content?: Array<{ type: string; text?: string }> | string;
         };
@@ -98,16 +102,87 @@ export function AppShell() {
           text = String(data.message.content);
         }
         if (text) {
+          if (errorFinalizeTimer) {
+            clearTimeout(errorFinalizeTimer);
+            errorFinalizeTimer = null;
+          }
           store.updateStreamingMessage(text);
         }
-      } else if (data.state === "final" || data.state === "aborted" || data.state === "error") {
+      } else if (data.state === "final" || data.state === "aborted") {
+        if (errorFinalizeTimer) {
+          clearTimeout(errorFinalizeTimer);
+          errorFinalizeTimer = null;
+        }
         store.finalizeStreaming();
+      } else if (data.state === "error") {
+        // Don't finalize immediately — OpenClaw may retry.
+        // Set a delayed finalization that gets cancelled if a retry starts.
+        if (errorFinalizeTimer) {
+          clearTimeout(errorFinalizeTimer);
+        }
+        errorFinalizeTimer = setTimeout(() => {
+          errorFinalizeTimer = null;
+          const s = useChatStore.getState();
+          if (s.streaming) {
+            // Update the streaming message with the error
+            s.updateStreamingMessage(data.errorMessage ?? "Request failed. Retrying...");
+          }
+        }, 5000);
+      }
+    });
+
+    // Listen for agent events (lifecycle + streaming text from retries)
+    const unsubAgent = gateway.on("agent", (payload) => {
+      const data = payload as {
+        runId?: string;
+        stream?: string;
+        data?: {
+          phase?: string;
+          text?: string;
+          delta?: string;
+          error?: string;
+        };
+      };
+
+      const store = useChatStore.getState();
+
+      if (data.stream === "lifecycle") {
+        if (data.data?.phase === "start") {
+          // A new attempt started (possibly a retry after error).
+          // Cancel any pending error finalization.
+          if (errorFinalizeTimer) {
+            clearTimeout(errorFinalizeTimer);
+            errorFinalizeTimer = null;
+          }
+          // Re-enable streaming if it was not active
+          if (!store.streaming) {
+            store.setStreaming(true);
+          }
+          if (data.runId) {
+            store.setCurrentRunId(data.runId);
+          }
+        } else if (data.data?.phase === "error") {
+          // Agent attempt errored — don't finalize yet, OpenClaw may retry.
+          // A subsequent "start" phase means retry; if no retry comes,
+          // the chat event with state "error" will be the final signal.
+          // We use a delayed finalization that gets cancelled if a retry starts.
+        }
+      } else if (data.stream === "assistant" && data.data) {
+        // Streaming text from the agent (works for retries too)
+        const text = data.data.text ?? data.data.delta ?? "";
+        if (text && store.streaming) {
+          store.updateStreamingMessage(text);
+        }
       }
     });
 
     return () => {
       unsubHealth();
       unsubChat();
+      unsubAgent();
+      if (errorFinalizeTimer) {
+        clearTimeout(errorFinalizeTimer);
+      }
       gateway.disconnect();
     };
   }, [port]);

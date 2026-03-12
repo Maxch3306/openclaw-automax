@@ -2,19 +2,36 @@ import { Plus, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useSettingsStore, PROVIDER_DEFAULTS } from "../../stores/settings-store";
 
+const DEFAULT_BASE_URL = "https://coding.dashscope.aliyuncs.com/v1";
 const API_PROTOCOLS = ["OpenAI", "Anthropic"];
 
 interface ModelEntry {
   id: string;
   displayName: string;
+  contextWindow: string;
+  maxTokens: string;
+  inputText: boolean;
+  inputImage: boolean;
+  reasoning: boolean;
 }
+
+const emptyEntry = (): ModelEntry => ({
+  id: "",
+  displayName: "",
+  contextWindow: "128000",
+  maxTokens: "8192",
+  inputText: true,
+  inputImage: false,
+  reasoning: false,
+});
 
 export function AddModelDialog() {
   const setShowAddDialog = useSettingsStore((s) => s.setShowAddModelDialog);
   const addCustomModel = useSettingsStore((s) => s.addCustomModel);
-  const updateCustomModel = useSettingsStore((s) => s.updateCustomModel);
+  const replaceProviderModels = useSettingsStore((s) => s.replaceProviderModels);
   const setProviderAuth = useSettingsStore((s) => s.setProviderAuth);
   const editingModel = useSettingsStore((s) => s.editingModel);
+  const editingProviderGroup = useSettingsStore((s) => s.editingProviderGroup);
   const models = useSettingsStore((s) => s.models);
   const configuredProviders = useSettingsStore((s) => s.configuredProviders);
 
@@ -24,25 +41,47 @@ export function AddModelDialog() {
     for (const m of models) {
       keys.add(m.provider);
     }
-    return Array.from(keys).toSorted();
+    return Array.from(keys).sort();
   }, [models]);
 
   const isEditing = !!editingModel;
+  const isEditingProvider = !!editingProviderGroup && editingProviderGroup.length > 0;
 
   const [mode, setMode] = useState<"builtin" | "custom">(isEditing ? "custom" : "builtin");
   const [selectedProvider, setSelectedProvider] = useState(builtInProviders[0] ?? "");
   const [apiKey, setApiKey] = useState("");
+  const [builtInBaseUrl, setBuiltInBaseUrl] = useState<string>(DEFAULT_BASE_URL);
   const [showKey, setShowKey] = useState(false);
 
-  // Custom model fields
-  const [modelEntries, setModelEntries] = useState<ModelEntry[]>(
-    isEditing
-      ? [{ id: editingModel.id, displayName: editingModel.displayName }]
-      : [{ id: "", displayName: "" }],
-  );
-  const [customApiKey, setCustomApiKey] = useState(editingModel?.apiKey ?? "");
-  const [apiProtocol, setApiProtocol] = useState(editingModel?.apiProtocol ?? "OpenAI");
-  const [baseUrl, setBaseUrl] = useState(editingModel?.baseUrl ?? "");
+  // When editing a provider, load ALL models from the group
+  const initialEntries: ModelEntry[] = isEditingProvider
+    ? editingProviderGroup.map((m) => ({
+        id: m.id,
+        displayName: m.displayName,
+        contextWindow: String(m.contextWindow ?? 128000),
+        maxTokens: String(m.maxTokens ?? 8192),
+        inputText: m.input ? m.input.includes("text") : true,
+        inputImage: m.input ? m.input.includes("image") : false,
+        reasoning: m.reasoning ?? false,
+      }))
+    : isEditing
+      ? [{
+          id: editingModel.id,
+          displayName: editingModel.displayName,
+          contextWindow: String(editingModel.contextWindow ?? 128000),
+          maxTokens: String(editingModel.maxTokens ?? 8192),
+          inputText: editingModel.input ? editingModel.input.includes("text") : true,
+          inputImage: editingModel.input ? editingModel.input.includes("image") : false,
+          reasoning: editingModel.reasoning ?? false,
+        }]
+      : [emptyEntry()];
+
+  const [modelEntries, setModelEntries] = useState<ModelEntry[]>(initialEntries);
+  const firstModel = isEditingProvider ? editingProviderGroup[0] : editingModel;
+  const [providerName, setProviderName] = useState(firstModel?.provider ?? "");
+  const [customApiKey, setCustomApiKey] = useState(firstModel?.apiKey ?? "");
+  const [apiProtocol, setApiProtocol] = useState(firstModel?.apiProtocol ?? "OpenAI");
+  const [baseUrl, setBaseUrl] = useState(firstModel?.baseUrl ?? "");
   const [showCustomKey, setShowCustomKey] = useState(false);
 
   const [saving, setSaving] = useState(false);
@@ -51,17 +90,15 @@ export function AddModelDialog() {
   const isAlreadyConfigured = configuredProviders.has(selectedProvider);
 
   const addModelEntry = () => {
-    setModelEntries([...modelEntries, { id: "", displayName: "" }]);
+    setModelEntries([...modelEntries, emptyEntry()]);
   };
 
   const removeModelEntry = (index: number) => {
-    if (modelEntries.length <= 1) {
-      return;
-    }
+    if (modelEntries.length <= 1) return;
     setModelEntries(modelEntries.filter((_, i) => i !== index));
   };
 
-  const updateModelEntry = (index: number, field: keyof ModelEntry, value: string) => {
+  const updateModelEntry = (index: number, field: keyof ModelEntry, value: string | boolean) => {
     const updated = [...modelEntries];
     updated[index] = { ...updated[index], [field]: value };
     setModelEntries(updated);
@@ -79,7 +116,7 @@ export function AddModelDialog() {
     setSaving(true);
     setError("");
     try {
-      await setProviderAuth(selectedProvider, apiKey.trim());
+      await setProviderAuth(selectedProvider, apiKey.trim(), builtInBaseUrl.trim() || undefined);
       setShowAddDialog(false);
     } catch (err) {
       setError(String(err));
@@ -89,8 +126,11 @@ export function AddModelDialog() {
   };
 
   const handleSubmitCustom = async () => {
-    // Validate
     const validEntries = modelEntries.filter((e) => e.id.trim());
+    if (!providerName.trim()) {
+      setError("Provider Name is required");
+      return;
+    }
     if (validEntries.length === 0) {
       setError("At least one Model ID is required");
       return;
@@ -102,19 +142,32 @@ export function AddModelDialog() {
     setSaving(true);
     setError("");
     try {
-      // Add each model entry as a CustomModel (all share the same provider config)
-      for (const entry of validEntries) {
-        const modelData = {
+      const newModels = validEntries.map((entry) => {
+        const inputTypes: string[] = [];
+        if (entry.inputText) inputTypes.push("text");
+        if (entry.inputImage) inputTypes.push("image");
+        if (inputTypes.length === 0) inputTypes.push("text");
+
+        return {
           id: entry.id.trim(),
           displayName: entry.displayName.trim() || entry.id.trim(),
-          provider: baseUrl.trim(),
+          provider: providerName.trim(),
           apiKey: customApiKey.trim() || undefined,
           apiProtocol,
           baseUrl: baseUrl.trim(),
+          contextWindow: parseInt(entry.contextWindow, 10) || 128000,
+          maxTokens: parseInt(entry.maxTokens, 10) || 8192,
+          input: inputTypes,
+          reasoning: entry.reasoning,
         };
-        if (isEditing && validEntries.length === 1) {
-          await updateCustomModel(editingModel.id, modelData);
-        } else {
+      });
+
+      if (isEditingProvider) {
+        // Replace all models for this provider
+        const oldIds = editingProviderGroup.map((m) => m.id);
+        await replaceProviderModels(editingProviderGroup[0].provider, oldIds, newModels);
+      } else {
+        for (const modelData of newModels) {
           await addCustomModel(modelData);
         }
       }
@@ -135,7 +188,7 @@ export function AddModelDialog() {
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--color-border)]">
           <h2 className="text-base font-semibold text-[var(--color-text)]">
-            {isEditing ? "Edit Model" : "Set up Provider"}
+            {isEditingProvider ? "Edit Provider" : isEditing ? "Edit Model" : "Set up Provider"}
           </h2>
           <button
             onClick={() => setShowAddDialog(false)}
@@ -196,7 +249,7 @@ export function AddModelDialog() {
                   {builtInProviders.length === 0 && (
                     <option value="">No providers available</option>
                   )}
-                  {builtInProviders.map((p) => (
+                  {builtInProviders.map((p: string) => (
                     <option key={p} value={p}>
                       {p}
                     </option>
@@ -231,6 +284,19 @@ export function AddModelDialog() {
                   </button>
                 </div>
               </div>
+
+              {selectedProvider === "modelstudio" && (
+              <div>
+                <label className="block text-sm text-[var(--color-text-muted)] mb-1">Base URL</label>
+                <input
+                  type="text"
+                  value={builtInBaseUrl}
+                  onChange={(e) => setBuiltInBaseUrl(e.target.value)}
+                  placeholder={DEFAULT_BASE_URL}
+                  className={inputClass}
+                />
+              </div>
+              )}
             </>
           )}
 
@@ -245,47 +311,113 @@ export function AddModelDialog() {
                 </div>
               )}
 
+              {/* Provider Name */}
+              <div>
+                <label className="block text-sm text-[var(--color-text-muted)] mb-1">
+                  * Provider Name
+                </label>
+                <input
+                  type="text"
+                  value={providerName}
+                  onChange={(e) => setProviderName(e.target.value)}
+                  placeholder="e.g. MyProvider"
+                  className={inputClass}
+                />
+              </div>
+
               {/* Models list */}
               <div>
                 <div className="flex items-center justify-between mb-1.5">
                   <label className="text-sm text-[var(--color-text-muted)]">* Models</label>
-                  {!isEditing && (
-                    <button
-                      type="button"
-                      onClick={addModelEntry}
-                      className="flex items-center gap-1 text-xs text-[var(--color-accent)] hover:opacity-80 transition-opacity"
-                    >
-                      <Plus size={12} />
-                      Add Model
-                    </button>
-                  )}
+                  <button
+                    type="button"
+                    onClick={addModelEntry}
+                    className="flex items-center gap-1 text-xs text-[var(--color-accent)] hover:opacity-80 transition-opacity"
+                  >
+                    <Plus size={12} />
+                    Add Model
+                  </button>
                 </div>
-                <div className="space-y-2">
+                <div className="space-y-3">
                   {modelEntries.map((entry, i) => (
-                    <div key={i} className="flex items-center gap-2">
-                      <input
-                        type="text"
-                        value={entry.id}
-                        onChange={(e) => updateModelEntry(i, "id", e.target.value)}
-                        placeholder="Model ID *"
-                        className={`flex-1 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm text-[var(--color-text)] placeholder:text-[var(--color-text-muted)]/50 focus:outline-none focus:border-[var(--color-accent)]`}
-                      />
-                      <input
-                        type="text"
-                        value={entry.displayName}
-                        onChange={(e) => updateModelEntry(i, "displayName", e.target.value)}
-                        placeholder="Display Name"
-                        className={`flex-1 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm text-[var(--color-text)] placeholder:text-[var(--color-text-muted)]/50 focus:outline-none focus:border-[var(--color-accent)]`}
-                      />
-                      {modelEntries.length > 1 && (
-                        <button
-                          type="button"
-                          onClick={() => removeModelEntry(i)}
-                          className="p-1.5 text-[var(--color-error)] hover:bg-[var(--color-error)]/10 rounded-md transition-colors shrink-0"
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      )}
+                    <div key={i} className="rounded-lg border border-[var(--color-border)] p-3 space-y-2">
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          value={entry.id}
+                          onChange={(e) => updateModelEntry(i, "id", e.target.value)}
+                          placeholder="Model ID *"
+                          className="flex-1 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm text-[var(--color-text)] placeholder:text-[var(--color-text-muted)]/50 focus:outline-none focus:border-[var(--color-accent)]"
+                        />
+                        <input
+                          type="text"
+                          value={entry.displayName}
+                          onChange={(e) => updateModelEntry(i, "displayName", e.target.value)}
+                          placeholder="Display Name"
+                          className="flex-1 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg px-3 py-2 text-sm text-[var(--color-text)] placeholder:text-[var(--color-text-muted)]/50 focus:outline-none focus:border-[var(--color-accent)]"
+                        />
+                        {modelEntries.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => removeModelEntry(i)}
+                            className="p-1.5 text-[var(--color-error)] hover:bg-[var(--color-error)]/10 rounded-md transition-colors shrink-0"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1">
+                          <label className="block text-[10px] text-[var(--color-text-muted)] mb-0.5">Context Window</label>
+                          <input
+                            type="number"
+                            value={entry.contextWindow}
+                            onChange={(e) => updateModelEntry(i, "contextWindow", e.target.value)}
+                            placeholder="128000"
+                            className="w-full bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg px-2 py-1.5 text-xs text-[var(--color-text)] placeholder:text-[var(--color-text-muted)]/50 focus:outline-none focus:border-[var(--color-accent)]"
+                          />
+                        </div>
+                        <div className="flex-1">
+                          <label className="block text-[10px] text-[var(--color-text-muted)] mb-0.5">Max Tokens</label>
+                          <input
+                            type="number"
+                            value={entry.maxTokens}
+                            onChange={(e) => updateModelEntry(i, "maxTokens", e.target.value)}
+                            placeholder="8192"
+                            className="w-full bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg px-2 py-1.5 text-xs text-[var(--color-text)] placeholder:text-[var(--color-text-muted)]/50 focus:outline-none focus:border-[var(--color-accent)]"
+                          />
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <label className="block text-[10px] text-[var(--color-text-muted)]">Options</label>
+                        <label className="flex items-center gap-1 text-xs text-[var(--color-text-muted)] cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={entry.inputText}
+                            onChange={(e) => updateModelEntry(i, "inputText", e.target.checked)}
+                            className="rounded"
+                          />
+                          text
+                        </label>
+                        <label className="flex items-center gap-1 text-xs text-[var(--color-text-muted)] cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={entry.inputImage}
+                            onChange={(e) => updateModelEntry(i, "inputImage", e.target.checked)}
+                            className="rounded"
+                          />
+                          image
+                        </label>
+                        <label className="flex items-center gap-1 text-xs text-[var(--color-warning)] cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={entry.reasoning}
+                            onChange={(e) => updateModelEntry(i, "reasoning", e.target.checked)}
+                            className="rounded"
+                          />
+                          reasoning
+                        </label>
+                      </div>
                     </div>
                   ))}
                 </div>
