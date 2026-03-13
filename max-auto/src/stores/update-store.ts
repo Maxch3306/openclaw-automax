@@ -64,10 +64,13 @@ export const useUpdateStore = create<UpdateState>((set, get) => ({
     set({ status: "downloading", downloadProgress: 0, error: null });
     try {
       let downloaded = 0;
+      let total = 0;
       await pendingUpdate.downloadAndInstall((progress) => {
-        if (progress.total && progress.total > 0) {
-          downloaded += progress.downloaded;
-          set({ downloadProgress: Math.round((downloaded / progress.total) * 100) });
+        if (progress.event === "Started" && progress.data.contentLength) {
+          total = progress.data.contentLength;
+        } else if (progress.event === "Progress" && total > 0) {
+          downloaded += progress.data.chunkLength;
+          set({ downloadProgress: Math.round((downloaded / total) * 100) });
         }
       });
       set({ status: "installing" });

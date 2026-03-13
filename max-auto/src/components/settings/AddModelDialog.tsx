@@ -32,7 +32,6 @@ export function AddModelDialog() {
   const setProviderAuth = useSettingsStore((s) => s.setProviderAuth);
   const editingModel = useSettingsStore((s) => s.editingModel);
   const editingProviderGroup = useSettingsStore((s) => s.editingProviderGroup);
-  const models = useSettingsStore((s) => s.models);
   const configuredProviders = useSettingsStore((s) => s.configuredProviders);
 
   // Only show providers defined in PROVIDER_DEFAULTS

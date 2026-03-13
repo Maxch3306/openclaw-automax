@@ -14,6 +14,7 @@ import { type ReactNode } from "react";
 import { GeneralSection } from "../components/settings/GeneralSection";
 import { IMChannelsSection } from "../components/settings/IMChannelsSection";
 import { ModelsAndApiSection } from "../components/settings/ModelsAndApiSection";
+import { AboutSection } from "../components/settings/AboutSection";
 import { useAppStore } from "../stores/app-store";
 import { useSettingsStore, type SettingsSection } from "../stores/settings-store";
 
@@ -45,6 +46,8 @@ function renderSection(section: SettingsSection) {
       return <ModelsAndApiSection />;
     case "im-channels":
       return <IMChannelsSection />;
+    case "about":
+      return <AboutSection />;
     default: {
       const item = NAV_ITEMS.find((n) => n.key === section);
       return <SectionPlaceholder label={item?.label ?? section} />;
