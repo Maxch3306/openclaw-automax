@@ -26,7 +26,7 @@ export const useAppStore = create<AppState>((set) => ({
   setupError: null,
   gatewayRunning: false,
   gatewayConnected: false,
-  gatewayPort: 18789,
+  gatewayPort: 51789,
   currentPage: "home",
 
   setSetupComplete: (v) => set({ setupComplete: v }),

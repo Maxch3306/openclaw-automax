@@ -10,7 +10,7 @@ impl GatewayProcess {
     pub fn new() -> Self {
         Self {
             child: Mutex::new(None),
-            port: Mutex::new(18789),
+            port: Mutex::new(51789),
         }
     }
 }

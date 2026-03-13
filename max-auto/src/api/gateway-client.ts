@@ -104,7 +104,7 @@ export class GatewayClient {
     this.onStatusChange = cb;
   }
 
-  connect(port = 18789, token = "") {
+  connect(port = 51789, token = "") {
     const url = `ws://127.0.0.1:${port}/`;
     // Skip if already connected/connecting to same endpoint
     if (

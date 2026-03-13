@@ -246,7 +246,7 @@ pub async fn start_gateway(
         tokio::time::sleep(std::time::Duration::from_millis(500)).await;
     }
 
-    let port = port.unwrap_or(18789);
+    let port = port.unwrap_or(51789);
     let bind = bind.unwrap_or_else(|| "loopback".to_string());
     let base_dir = maxauto_dir();
     let config_path = base_dir.join("config").join("openclaw.json");
