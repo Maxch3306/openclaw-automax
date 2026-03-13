@@ -67,21 +67,6 @@ interface ProviderDefaults {
 const ZERO_COST = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
 
 export const PROVIDER_DEFAULTS: Record<string, ProviderDefaults> = {
-  openai: {
-    baseUrl: "https://api.openai.com/v1",
-    api: "openai-completions",
-    models: [],
-  },
-  anthropic: {
-    baseUrl: "https://api.anthropic.com",
-    api: "anthropic-messages",
-    models: [],
-  },
-  deepseek: {
-    baseUrl: "https://api.deepseek.com/v1",
-    api: "openai-completions",
-    models: [],
-  },
   "maxauto-crs-openai": {
     baseUrl: "https://claude-proxy.bsoltest.com/openai",
     api: "openai-responses",
@@ -129,26 +114,22 @@ export const PROVIDER_DEFAULTS: Record<string, ProviderDefaults> = {
       { id: "MiniMax-M2.5-highspeed", name: "MiniMax M2.5 Highspeed", reasoning: true, input: ["text"], cost: { input: 0.3, output: 1.2, cacheRead: 0.03, cacheWrite: 0.12 }, contextWindow: 200000, maxTokens: 8192 },
     ],
   },
-  modelstudio: {
-    baseUrl: "https://coding.dashscope.aliyuncs.com/v1",
-    api: "openai-completions",
-    models: [
-      { id: "qwen3.5-plus", name: "qwen3.5-plus", reasoning: false, input: ["text", "image"], cost: ZERO_COST, contextWindow: 1000000, maxTokens: 65536 },
-      { id: "qwen3-max-2026-01-23", name: "qwen3-max-2026-01-23", reasoning: false, input: ["text"], cost: ZERO_COST, contextWindow: 262144, maxTokens: 65536 },
-      { id: "qwen3-coder-next", name: "qwen3-coder-next", reasoning: false, input: ["text"], cost: ZERO_COST, contextWindow: 262144, maxTokens: 65536 },
-      { id: "qwen3-coder-plus", name: "qwen3-coder-plus", reasoning: false, input: ["text"], cost: ZERO_COST, contextWindow: 1000000, maxTokens: 65536 },
-      { id: "MiniMax-M2.5", name: "MiniMax-M2.5", reasoning: false, input: ["text"], cost: ZERO_COST, contextWindow: 1000000, maxTokens: 65536 },
-      { id: "glm-5", name: "glm-5", reasoning: false, input: ["text"], cost: ZERO_COST, contextWindow: 202752, maxTokens: 16384 },
-      { id: "kimi-k2.5", name: "kimi-k2.5", reasoning: false, input: ["text", "image"], cost: ZERO_COST, contextWindow: 262144, maxTokens: 32768 },
-    ],
-  },
-  "aliyun-maxauto": {
+  "maxauto-aliyun-cn": {
     baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
     api: "openai-completions",
     models: [
       { id: "qwen3.5-plus", name: "qwen3.5-plus", reasoning: false, input: ["text", "image"], cost: ZERO_COST, contextWindow: 1000000, maxTokens: 65536 },
       { id: "qwen3-coder-next", name: "qwen3-coder-next", reasoning: false, input: ["text"], cost: ZERO_COST, contextWindow: 262144, maxTokens: 65536 }    ],
   },
+  "maxauto-glm-coding-plan": {
+    baseUrl: "https://open.bigmodel.cn/api/coding/paas/v4",
+    api: "openai-completions",
+    models: [
+      { id: "glm-5", name: "GLM-5", reasoning: true, input: ["text"], cost: ZERO_COST, contextWindow: 204800, maxTokens: 131072 },
+      { id: "glm-4.7", name: "GLM-4.7", reasoning: true, input: ["text"], cost: ZERO_COST, contextWindow: 204800, maxTokens: 131072 },
+      { id: "glm-4.6v", name: "GLM-4.6V", reasoning: false, input: ["text", "image"], cost: ZERO_COST, contextWindow: 128000, maxTokens: 32768 },
+    ],
+  }
 };
 
 /**

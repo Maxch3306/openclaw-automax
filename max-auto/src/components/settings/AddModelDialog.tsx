@@ -35,14 +35,10 @@ export function AddModelDialog() {
   const models = useSettingsStore((s) => s.models);
   const configuredProviders = useSettingsStore((s) => s.configuredProviders);
 
-  // Combine providers from models.list and PROVIDER_DEFAULTS (union of both)
+  // Only show providers defined in PROVIDER_DEFAULTS
   const builtInProviders = useMemo(() => {
-    const keys = new Set<string>(Object.keys(PROVIDER_DEFAULTS));
-    for (const m of models) {
-      keys.add(m.provider);
-    }
-    return Array.from(keys).sort();
-  }, [models]);
+    return Object.keys(PROVIDER_DEFAULTS).sort();
+  }, []);
 
   const isEditing = !!editingModel;
   const isEditingProvider = !!editingProviderGroup && editingProviderGroup.length > 0;
