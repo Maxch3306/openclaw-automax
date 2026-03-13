@@ -52,10 +52,13 @@ export const useUpdateStore = create<UpdateState>((set, get) => ({
         set({ status: "up-to-date", availableVersion: null, releaseNotes: null });
       }
     } catch (err) {
-      set({
-        status: "error",
-        error: err instanceof Error ? err.message : String(err),
-      });
+      const msg = err instanceof Error ? err.message : String(err);
+      // "fallback platforms" error means no release exists for this OS yet — not a real error
+      if (msg.includes("fallback platforms") || msg.includes("were found in the response")) {
+        set({ status: "up-to-date", availableVersion: null, releaseNotes: null });
+      } else {
+        set({ status: "error", error: msg });
+      }
     }
   },
 
