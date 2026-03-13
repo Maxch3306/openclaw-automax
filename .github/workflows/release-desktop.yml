@@ -6,17 +6,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  version:
-    runs-on: ubuntu-latest
-    outputs:
-      version: ${{ steps.pkg.outputs.version }}
-    steps:
-      - uses: actions/checkout@v5
-      - id: pkg
-        run: echo "version=$(node -p "require('./max-auto/package.json').version")" >> "$GITHUB_OUTPUT"
-
   build:
-    needs: version
     strategy:
       fail-fast: false
       matrix:
@@ -40,18 +30,36 @@ jobs:
             .github
           sparse-checkout-cone-mode: true
 
+      - name: Read version
+        id: pkg
+        shell: bash
+        run: echo "version=$(node -p "require('./max-auto/package.json').version")" >> "$GITHUB_OUTPUT"
+
       - uses: pnpm/action-setup@v4
 
       - uses: actions/setup-node@v5
         with:
           node-version: 24
+          cache: pnpm
+          cache-dependency-path: max-auto/pnpm-lock.yaml
 
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.rust-targets }}
 
+      - name: Cache Rust build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            max-auto/src-tauri/target
+          key: rust-${{ matrix.platform }}-${{ hashFiles('max-auto/src-tauri/Cargo.lock') }}
+          restore-keys: rust-${{ matrix.platform }}-
+
       - name: Install frontend deps
-        run: pnpm install
+        run: pnpm install --frozen-lockfile
         working-directory: max-auto
 
       - uses: tauri-apps/tauri-action@v0
@@ -61,15 +69,15 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           projectPath: max-auto
-          tagName: v${{ needs.version.outputs.version }}
-          releaseName: "MaxAuto v${{ needs.version.outputs.version }}"
-          releaseBody: "Desktop installer for MaxAuto v${{ needs.version.outputs.version }}"
+          tagName: v${{ steps.pkg.outputs.version }}
+          releaseName: "MaxAuto v${{ steps.pkg.outputs.version }}"
+          releaseBody: "Desktop installer for MaxAuto v${{ steps.pkg.outputs.version }}"
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
 
   bump-version:
-    needs: [version, build]
+    needs: build
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -80,12 +88,11 @@ jobs:
 
       - name: Bump patch version
         run: |
-          CURRENT="${{ needs.version.outputs.version }}"
+          CURRENT=$(node -p "require('./max-auto/package.json').version")
           IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
           NEXT="${MAJOR}.${MINOR}.$((PATCH + 1))"
           echo "Bumping version: ${CURRENT} -> ${NEXT}"
 
-          # Update package.json
           cd max-auto
           node -e "
             const fs = require('fs');
@@ -94,7 +101,6 @@ jobs:
             fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
           "
 
-          # Update tauri.conf.json
           node -e "
             const fs = require('fs');
             const conf = JSON.parse(fs.readFileSync('src-tauri/tauri.conf.json', 'utf8'));
