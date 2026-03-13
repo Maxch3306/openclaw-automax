@@ -1,3 +1,10 @@
+import {
+  loadOrCreateDeviceIdentity,
+  buildDeviceAuthPayload,
+  signDevicePayload,
+  type DeviceIdentity,
+} from "./device-identity";
+
 export interface RequestFrame {
   type: "req";
   id: string;
@@ -46,6 +53,7 @@ export class GatewayClient {
   private _token = "";
   private _intentionalClose = false;
   private onStatusChange: ((connected: boolean) => void) | null = null;
+  private _deviceIdentity: DeviceIdentity | null = null;
 
   // Debug log buffer
   debugLog: string[] = [];
@@ -200,29 +208,10 @@ export class GatewayClient {
           frame.type === "event" &&
           (frame as EventFrame).event === "connect.challenge"
         ) {
-          this.log("Got challenge, sending connect request...");
-          const connectFrame = {
-            type: "req",
-            id: "connect-0",
-            method: "connect",
-            params: {
-              minProtocol: 3,
-              maxProtocol: 3,
-              client: {
-                id: "openclaw-control-ui",
-                displayName: "MaxAuto",
-                version: "0.1.0",
-                platform: navigator.platform.includes("Win") ? "win32" : "darwin",
-                mode: "ui",
-              },
-              role: "operator",
-              scopes: ["operator.admin", "operator.read", "operator.write", "operator.approvals", "operator.pairing"],
-              auth: this._token ? { token: this._token } : {},
-            },
-          };
-          const sent = JSON.stringify(connectFrame);
-          this.log(`SEND: ${sent.slice(0, 300)}`);
-          ws.send(sent);
+          const challengePayload = (frame as EventFrame).payload as { nonce?: string } | undefined;
+          const nonce = challengePayload?.nonce ?? "";
+          this.log("Got challenge, sending connect request with device identity...");
+          this.sendConnectWithDeviceIdentity(ws, nonce);
           return;
         }
 
@@ -263,6 +252,71 @@ export class GatewayClient {
     ws.addEventListener("error", () => {
       this.log("WebSocket error");
     });
+  }
+
+  private async sendConnectWithDeviceIdentity(ws: WebSocket, nonce: string) {
+    try {
+      // Load or create device identity (persisted in localStorage)
+      if (!this._deviceIdentity) {
+        this._deviceIdentity = await loadOrCreateDeviceIdentity();
+      }
+      const identity = this._deviceIdentity;
+
+      const clientId = "openclaw-control-ui";
+      const clientMode = "ui";
+      const role = "operator";
+      const scopes = ["operator.admin", "operator.read", "operator.write", "operator.approvals", "operator.pairing"];
+      const platform = navigator.platform.includes("Win") ? "win32" : "darwin";
+      const signedAtMs = Date.now();
+
+      // Build and sign the v2 auth payload
+      const payload = buildDeviceAuthPayload({
+        deviceId: identity.deviceId,
+        clientId,
+        clientMode,
+        role,
+        scopes,
+        signedAtMs,
+        token: this._token || "",
+        nonce,
+      });
+      const signature = await signDevicePayload(identity.privateKey, payload);
+
+      const connectFrame = {
+        type: "req",
+        id: "connect-0",
+        method: "connect",
+        params: {
+          minProtocol: 3,
+          maxProtocol: 3,
+          client: {
+            id: clientId,
+            displayName: "MaxAuto",
+            version: "0.1.0",
+            platform,
+            mode: clientMode,
+          },
+          role,
+          scopes,
+          device: {
+            id: identity.deviceId,
+            publicKey: identity.publicKey,
+            signature,
+            signedAt: signedAtMs,
+            nonce,
+          },
+          auth: this._token ? { token: this._token } : undefined,
+        },
+      };
+      const sent = JSON.stringify(connectFrame);
+      this.log(`SEND: ${sent.slice(0, 300)}`);
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(sent);
+      }
+    } catch (err) {
+      this.log(`Device identity error: ${err instanceof Error ? err.message : String(err)}`);
+      ws.close();
+    }
   }
 
   private handleResponse(frame: ResponseFrame) {
