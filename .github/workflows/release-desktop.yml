@@ -40,8 +40,18 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: 24
-          cache: pnpm
-          cache-dependency-path: max-auto/pnpm-lock.yaml
+
+      - name: Get pnpm store path
+        id: pnpm-store
+        shell: bash
+        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: pnpm-${{ matrix.platform }}-${{ hashFiles('max-auto/pnpm-lock.yaml') }}
+          restore-keys: pnpm-${{ matrix.platform }}-
 
       - uses: dtolnay/rust-toolchain@stable
         with:
